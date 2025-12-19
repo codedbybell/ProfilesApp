@@ -6,6 +6,7 @@ import {
     Pressable,
     StyleSheet,
     ActivityIndicator,
+    RefreshControl,
 } from 'react-native';
 import { api } from '../api/client';
 
@@ -15,6 +16,7 @@ export default function ProfilesListScreen({ navigation }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [hasMore, setHasMore] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     const fetchProfiles = async () => {
         if (loading || !hasMore) return;
@@ -32,10 +34,24 @@ export default function ProfilesListScreen({ navigation }) {
                 setPage((prev) => prev + 1);
             }
         } catch (err) {
-            setError('Failed to load profiles. Check your connection.');
-            console.error(err);
+            setError(err.message || 'Profiller yüklenemedi.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            const res = await api.get(`/profiles?page=1&limit=10`);
+            setProfiles(res.data);
+            setPage(2);
+            setHasMore(res.data.length > 0);
+            setError(null);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setRefreshing(false);
         }
     };
 
@@ -48,8 +64,13 @@ export default function ProfilesListScreen({ navigation }) {
             style={styles.card}
             onPress={() => navigation.navigate('ProfileDetail', { id: item.id })}
         >
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.email}>{item.email}</Text>
+            <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{item.name.charAt(0)}</Text>
+            </View>
+            <View style={styles.infoContainer}>
+                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.email}>{item.email}</Text>
+            </View>
         </Pressable>
     );
 
@@ -57,17 +78,35 @@ export default function ProfilesListScreen({ navigation }) {
         if (!loading) return null;
         return (
             <View style={styles.footer}>
-                <ActivityIndicator size="large" color="#007AFF" />
+                <ActivityIndicator size="small" color="#FFB6C1" />
             </View>
         );
     };
+
+    const renderEmpty = () => {
+        if (loading) return null;
+        return (
+            <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>Profil bulunamadı</Text>
+            </View>
+        );
+    };
+
+    if (loading && profiles.length === 0) {
+        return (
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color="#FFB6C1" />
+                <Text style={styles.loadingText}>Yükleniyor...</Text>
+            </View>
+        );
+    }
 
     if (error && profiles.length === 0) {
         return (
             <View style={styles.centerContainer}>
                 <Text style={styles.errorText}>{error}</Text>
-                <Pressable style={styles.retryButton} onPress={fetchProfiles}>
-                    <Text style={styles.retryText}>Retry</Text>
+                <Pressable style={styles.retryButton} onPress={onRefresh}>
+                    <Text style={styles.retryText}>Tekrar Dene</Text>
                 </Pressable>
             </View>
         );
@@ -82,7 +121,16 @@ export default function ProfilesListScreen({ navigation }) {
                 onEndReached={fetchProfiles}
                 onEndReachedThreshold={0.5}
                 ListFooterComponent={renderFooter}
+                ListEmptyComponent={renderEmpty}
                 contentContainerStyle={styles.listContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={['#DB7093']}
+                        tintColor={'#DB7093'}
+                    />
+                }
             />
         </View>
     );
@@ -95,6 +143,7 @@ const styles = StyleSheet.create({
     },
     listContent: {
         padding: 16,
+        flexGrow: 1,
     },
     card: {
         flexDirection: 'row',
@@ -109,10 +158,10 @@ const styles = StyleSheet.create({
         shadowRadius: 5,
         elevation: 4,
     },
-    avatarPlaceholder: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
+    avatarCircle: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         backgroundColor: '#FFE4E1',
         justifyContent: 'center',
         alignItems: 'center',
@@ -122,6 +171,9 @@ const styles = StyleSheet.create({
         color: '#DB7093',
         fontWeight: 'bold',
         fontSize: 18,
+    },
+    infoContainer: {
+        flex: 1,
     },
     name: {
         fontSize: 17,
@@ -144,6 +196,21 @@ const styles = StyleSheet.create({
         padding: 20,
         backgroundColor: '#FFF0F5',
     },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 50,
+    },
+    emptyText: {
+        fontSize: 18,
+        color: '#DB7093',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        color: '#DB7093',
+    },
     errorText: {
         fontSize: 16,
         color: '#DB7093',
@@ -152,7 +219,7 @@ const styles = StyleSheet.create({
     },
     retryButton: {
         backgroundColor: '#FFB6C1',
-        paddingHorizontal: 30,
+        paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 25,
     },
